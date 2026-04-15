@@ -1,5 +1,6 @@
 node_modules/
+.next/
 dist/
-data/
 .env
 .DS_Store
+prisma/migrations/

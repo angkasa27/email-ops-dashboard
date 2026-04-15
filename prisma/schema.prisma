@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MailboxStatus {
+  idle
+  syncing
+  ok
+  error
+}
+
+enum MailDirection {
+  incoming
+  outgoing
+}
+
+enum SyncRunStatus {
+  running
+  ok
+  error
+}
+
+enum SyncJobStatus {
+  queued
+  running
+  completed
+  failed
+}
+
+model Mailbox {
+  id                String        @id @default(cuid())
+  email             String        @unique
+  host              String
+  port              Int
+  secure            Boolean       @default(true)
+  username          String
+  encryptedPassword String
+  status            MailboxStatus @default(idle)
+  lastSyncStartedAt DateTime?
+  lastSyncFinishedAt DateTime?
+  lastSyncError     String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  messages    Message[]
+  syncCursors SyncCursor[]
+  syncRuns    SyncRun[]
+  syncJobs    SyncJob[]
+}
+
+model Message {
+  id          String        @id @default(cuid())
+  mailboxId   String
+  mailbox     Mailbox       @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  folderName  String
+  externalUid Int
+  messageId   String?
+  direction   MailDirection
+  fromJson    Json
+  toJson      Json
+  ccJson      Json
+  bccJson     Json
+  subject     String?
+  sentAt      DateTime?
+  receivedAt  DateTime?
+  snippet     String?
+  bodyText    String?
+  bodyHtml    String?
+  syncedAt    DateTime      @default(now())
+
+  auditLogs AuditLog[]
+
+  @@unique([mailboxId, folderName, externalUid])
+  @@index([mailboxId, direction, receivedAt])
+}
+
+model SyncCursor {
+  mailboxId  String
+  folderName String
+  lastUid    Int
+  updatedAt  DateTime @updatedAt
+
+  mailbox Mailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+
+  @@id([mailboxId, folderName])
+}
+
+model SyncRun {
+  id            String        @id @default(cuid())
+  mailboxId     String
+  mailbox       Mailbox       @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  startedAt     DateTime      @default(now())
+  finishedAt    DateTime?
+  status        SyncRunStatus @default(running)
+  incomingCount Int           @default(0)
+  outgoingCount Int           @default(0)
+  errorMessage  String?
+
+  @@index([startedAt])
+}
+
+model SyncJob {
+  id         String       @id @default(cuid())
+  mailboxId  String
+  mailbox    Mailbox      @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  status     SyncJobStatus @default(queued)
+  reason     String
+  createdAt  DateTime     @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+  error      String?
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  username  String
+  action    String
+  messageId String?
+  message   Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+}
+
+model WorkerHeartbeat {
+  id           String   @id @default("primary")
+  lastSeenAt   DateTime
+  currentState String
+  updatedAt    DateTime @updatedAt
+}

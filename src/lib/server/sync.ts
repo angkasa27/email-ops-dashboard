@@ -1,0 +1,277 @@
+import { MailDirection, Prisma, SyncJobStatus, SyncRunStatus } from "@prisma/client";
+
+import { decryptSecret } from "./crypto";
+import { env } from "./env";
+import { createImapClient, type ImapMailboxClient } from "./mail";
+import { prisma } from "./prisma";
+
+type FolderPlan = {
+  folderName: string;
+  direction: MailDirection;
+};
+
+const FOLDERS: FolderPlan[] = [
+  { folderName: "Inbox", direction: "incoming" },
+  { folderName: "Sent", direction: "outgoing" }
+];
+
+function toJson(value: unknown): Prisma.InputJsonValue {
+  return value as Prisma.InputJsonValue;
+}
+
+export async function queueMailboxSync(mailboxId: string, reason: string) {
+  return await prisma.syncJob.create({
+    data: {
+      mailboxId,
+      reason,
+      status: "queued"
+    }
+  });
+}
+
+export async function processSyncQueue(options?: { createClient?: typeof createImapClient }) {
+  const createClient = options?.createClient ?? createImapClient;
+
+  const job = await prisma.syncJob.findFirst({
+    where: { status: "queued" },
+    orderBy: { createdAt: "asc" }
+  });
+
+  if (!job) {
+    return false;
+  }
+
+  await prisma.syncJob.update({
+    where: { id: job.id },
+    data: {
+      status: "running",
+      startedAt: new Date()
+    }
+  });
+
+  try {
+    await syncMailbox(job.mailboxId, createClient);
+    await prisma.syncJob.update({
+      where: { id: job.id },
+      data: {
+        status: "completed",
+        finishedAt: new Date()
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown sync failure";
+    await prisma.syncJob.update({
+      where: { id: job.id },
+      data: {
+        status: "failed",
+        finishedAt: new Date(),
+        error: message
+      }
+    });
+  }
+
+  return true;
+}
+
+export async function syncMailbox(
+  mailboxId: string,
+  createClient: typeof createImapClient = createImapClient
+): Promise<void> {
+  const mailbox = await prisma.mailbox.findUnique({ where: { id: mailboxId } });
+  if (!mailbox) {
+    throw new Error(`Mailbox ${mailboxId} not found`);
+  }
+
+  const run = await prisma.syncRun.create({
+    data: {
+      mailboxId,
+      status: SyncRunStatus.running
+    }
+  });
+
+  await prisma.mailbox.update({
+    where: { id: mailboxId },
+    data: {
+      status: "syncing",
+      lastSyncStartedAt: new Date(),
+      lastSyncError: null
+    }
+  });
+
+  let client: ImapMailboxClient | null = null;
+
+  try {
+    const password = decryptSecret(mailbox.encryptedPassword, env.APP_ENCRYPTION_KEY);
+    client = await createClient({
+      host: mailbox.host,
+      port: mailbox.port,
+      secure: mailbox.secure,
+      username: mailbox.username,
+      password
+    });
+
+    let incomingCount = 0;
+    let outgoingCount = 0;
+
+    for (const folder of FOLDERS) {
+      const count = await syncFolder(mailboxId, folder, client);
+      if (folder.direction === "incoming") {
+        incomingCount += count;
+      } else {
+        outgoingCount += count;
+      }
+    }
+
+    await prisma.syncRun.update({
+      where: { id: run.id },
+      data: {
+        status: SyncRunStatus.ok,
+        finishedAt: new Date(),
+        incomingCount,
+        outgoingCount,
+        errorMessage: null
+      }
+    });
+
+    await prisma.mailbox.update({
+      where: { id: mailboxId },
+      data: {
+        status: "ok",
+        lastSyncFinishedAt: new Date(),
+        lastSyncError: null
+      }
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown sync failure";
+    await prisma.syncRun.update({
+      where: { id: run.id },
+      data: {
+        status: SyncRunStatus.error,
+        finishedAt: new Date(),
+        errorMessage: message
+      }
+    });
+    await prisma.mailbox.update({
+      where: { id: mailboxId },
+      data: {
+        status: "error",
+        lastSyncFinishedAt: new Date(),
+        lastSyncError: message
+      }
+    });
+    throw error;
+  } finally {
+    if (client) {
+      await client.close();
+    }
+  }
+}
+
+async function syncFolder(mailboxId: string, folder: FolderPlan, client: ImapMailboxClient): Promise<number> {
+  const cursor = await prisma.syncCursor.findUnique({
+    where: {
+      mailboxId_folderName: {
+        mailboxId,
+        folderName: folder.folderName
+      }
+    }
+  });
+
+  const lastUid = cursor?.lastUid ?? 0;
+  const messages = await client.listMessages(folder.folderName, lastUid);
+
+  let maxUid = lastUid;
+  for (const message of messages) {
+    maxUid = Math.max(maxUid, message.uid);
+
+    await prisma.message.upsert({
+      where: {
+        mailboxId_folderName_externalUid: {
+          mailboxId,
+          folderName: folder.folderName,
+          externalUid: message.uid
+        }
+      },
+      update: {
+        messageId: message.messageId,
+        direction: folder.direction,
+        fromJson: toJson(message.from),
+        toJson: toJson(message.to),
+        ccJson: toJson(message.cc),
+        bccJson: toJson(message.bcc),
+        subject: message.subject,
+        sentAt: message.sentAt ? new Date(message.sentAt) : null,
+        receivedAt: message.receivedAt ? new Date(message.receivedAt) : null,
+        snippet: message.snippet,
+        bodyText: message.bodyText,
+        bodyHtml: message.bodyHtml,
+        syncedAt: new Date()
+      },
+      create: {
+        mailboxId,
+        folderName: folder.folderName,
+        externalUid: message.uid,
+        messageId: message.messageId,
+        direction: folder.direction,
+        fromJson: toJson(message.from),
+        toJson: toJson(message.to),
+        ccJson: toJson(message.cc),
+        bccJson: toJson(message.bcc),
+        subject: message.subject,
+        sentAt: message.sentAt ? new Date(message.sentAt) : null,
+        receivedAt: message.receivedAt ? new Date(message.receivedAt) : null,
+        snippet: message.snippet,
+        bodyText: message.bodyText,
+        bodyHtml: message.bodyHtml
+      }
+    });
+  }
+
+  if (maxUid > lastUid) {
+    await prisma.syncCursor.upsert({
+      where: {
+        mailboxId_folderName: {
+          mailboxId,
+          folderName: folder.folderName
+        }
+      },
+      update: {
+        lastUid: maxUid
+      },
+      create: {
+        mailboxId,
+        folderName: folder.folderName,
+        lastUid: maxUid
+      }
+    });
+  }
+
+  return messages.length;
+}
+
+export async function recordWorkerHeartbeat(currentState: string) {
+  await prisma.workerHeartbeat.upsert({
+    where: { id: "primary" },
+    update: {
+      currentState,
+      lastSeenAt: new Date()
+    },
+    create: {
+      id: "primary",
+      currentState,
+      lastSeenAt: new Date()
+    }
+  });
+}
+
+export function mapJobStatusToSyncState(status: SyncJobStatus): "queued" | "running" | "done" {
+  if (status === "queued") {
+    return "queued";
+  }
+
+  if (status === "running") {
+    return "running";
+  }
+
+  return "done";
+}
