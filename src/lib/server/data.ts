@@ -15,6 +15,8 @@ export type ResolvedMessageQuery = {
 type MessageFilterInput = {
   mailboxId?: string;
   direction?: MailDirection;
+  folderName?: "Inbox" | "Sent";
+  searchScope?: "all" | "subject" | "body";
   search?: string;
   fromDate?: string;
   toDate?: string;
@@ -208,11 +210,21 @@ export async function getMessages(filters: MessageFilterInput) {
     where.direction = filters.direction;
   }
 
+  if (filters.folderName) {
+    where.folderName = filters.folderName;
+  }
+
   if (filters.search) {
-    where.OR = [
-      { subject: { contains: filters.search, mode: "insensitive" } },
-      { bodyText: { contains: filters.search, mode: "insensitive" } }
-    ];
+    if (filters.searchScope === "subject") {
+      where.subject = { contains: filters.search, mode: "insensitive" };
+    } else if (filters.searchScope === "body") {
+      where.bodyText = { contains: filters.search, mode: "insensitive" };
+    } else {
+      where.OR = [
+        { subject: { contains: filters.search, mode: "insensitive" } },
+        { bodyText: { contains: filters.search, mode: "insensitive" } }
+      ];
+    }
   }
 
   if (filters.fromDate || filters.toDate) {
@@ -244,6 +256,7 @@ export async function getMessages(filters: MessageFilterInput) {
         direction: true,
         subject: true,
         snippet: true,
+        folderName: true,
         receivedAt: true,
         syncedAt: true,
         fromJson: true,

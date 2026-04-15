@@ -78,7 +78,14 @@ export async function createImapClient(options: {
 
   return {
     async listMessages(folderName, afterUid) {
-      await client.mailboxOpen(folderName, { readOnly: true });
+      const mailbox = await client.mailboxOpen(folderName, { readOnly: true });
+      const uidNext = mailbox.uidNext ?? 1;
+
+      // Some IMAP servers reject UID FETCH ranges that start above the current UID window.
+      if (afterUid + 1 >= uidNext) {
+        return [];
+      }
+
       const messages: SyncMessage[] = [];
       const range = `${Math.max(afterUid + 1, 1)}:*`;
 

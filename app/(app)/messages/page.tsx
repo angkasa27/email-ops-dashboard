@@ -1,6 +1,7 @@
 import { MailDirection } from "@/generated/prisma/client";
 import Link from "next/link";
 
+import { MessagesInbox } from "@/components/features/messages-inbox";
 import { MessagesTable } from "@/components/features/messages-table";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,17 +26,15 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { getMessages, type MessageSortBy } from "@/lib/server/data";
+import {
+  getMessages,
+  type MessageSortBy,
+  type MessageSortDir,
+} from "@/lib/server/data";
 
 export const dynamic = "force-dynamic";
 
-const SORT_OPTIONS: Array<{ value: MessageSortBy; label: string }> = [
-  { value: "receivedAt", label: "Received time" },
-  { value: "syncedAt", label: "Synced time" },
-  { value: "subject", label: "Subject" },
-  { value: "mailbox", label: "Mailbox" },
-  { value: "direction", label: "Direction" },
-];
+type ViewMode = "table" | "inbox";
 
 function toInt(value: string | undefined, fallback: number) {
   const parsed = Number(value);
@@ -46,6 +45,10 @@ function toInt(value: string | undefined, fallback: number) {
   return Math.floor(parsed);
 }
 
+function getViewMode(value: string | undefined): ViewMode {
+  return value === "inbox" ? "inbox" : "table";
+}
+
 export default async function MessagesPage({
   searchParams,
 }: {
@@ -54,10 +57,21 @@ export default async function MessagesPage({
   const params = await searchParams;
   const page = toInt(params.page, 1);
   const pageSize = Math.min(toInt(params.pageSize, 50), 100);
+  const view = getViewMode(params.view);
 
   const filters = {
     mailboxId: params.mailboxId,
     direction: (params.direction as MailDirection | undefined) ?? undefined,
+    folderName:
+      params.folderName === "Inbox" || params.folderName === "Sent"
+        ? params.folderName
+        : undefined,
+    searchScope:
+      params.searchScope === "subject" ||
+      params.searchScope === "body" ||
+      params.searchScope === "all"
+        ? params.searchScope
+        : undefined,
     search: params.search,
     fromDate: params.fromDate,
     toDate: params.toDate,
@@ -95,19 +109,53 @@ export default async function MessagesPage({
     return output ? `/messages?${output}` : "/messages";
   }
 
+  function getSortHref(column: MessageSortBy) {
+    const nextDir: MessageSortDir =
+      data.sort.by === column && data.sort.direction === "desc" ? "asc" : "desc";
+
+    return buildUrl({
+      sortBy: column,
+      sortDir: nextDir,
+      page: "1",
+    });
+  }
+
+  const sortHrefs: Record<MessageSortBy, string> = {
+    receivedAt: getSortHref("receivedAt"),
+    syncedAt: getSortHref("syncedAt"),
+    subject: getSortHref("subject"),
+    mailbox: getSortHref("mailbox"),
+    direction: getSortHref("direction"),
+  };
+
   return (
     <div className="flex flex-col gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>Message Explorer</CardTitle>
-          <CardDescription>
-            Search, filter, sort, and page through monitored email activity.
-          </CardDescription>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle>Message Explorer</CardTitle>
+              <CardDescription>
+                Search, filter, sort, and page through monitored email activity.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button asChild variant={view === "table" ? "default" : "outline"}>
+                <Link href={buildUrl({ view: "table", page: "1" })}>Table View</Link>
+              </Button>
+              <Button asChild variant={view === "inbox" ? "default" : "outline"}>
+                <Link href={buildUrl({ view: "inbox", page: "1" })}>Inbox View</Link>
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <form className="flex flex-col gap-4" method="get">
             <input type="hidden" name="page" value="1" />
-            <FieldGroup className="md:grid md:grid-cols-4 md:items-end md:gap-3">
+            <input type="hidden" name="view" value={view} />
+            <input type="hidden" name="sortBy" value={data.sort.by} />
+            <input type="hidden" name="sortDir" value={data.sort.direction} />
+            <FieldGroup className="md:grid md:grid-cols-5 md:items-end md:gap-3">
               <Field>
                 <FieldLabel htmlFor="mailboxId">Mailbox</FieldLabel>
                 <select
@@ -138,6 +186,32 @@ export default async function MessagesPage({
                 </select>
               </Field>
               <Field>
+                <FieldLabel htmlFor="folderName">Folder</FieldLabel>
+                <select
+                  id="folderName"
+                  name="folderName"
+                  defaultValue={params.folderName ?? ""}
+                  className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">All folders</option>
+                  <option value="Inbox">Inbox</option>
+                  <option value="Sent">Sent</option>
+                </select>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="searchScope">Search in</FieldLabel>
+                <select
+                  id="searchScope"
+                  name="searchScope"
+                  defaultValue={params.searchScope ?? "all"}
+                  className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
+                >
+                  <option value="all">Subject + Body</option>
+                  <option value="subject">Subject only</option>
+                  <option value="body">Body only</option>
+                </select>
+              </Field>
+              <Field>
                 <FieldLabel htmlFor="search">Search</FieldLabel>
                 <Input
                   id="search"
@@ -146,7 +220,7 @@ export default async function MessagesPage({
                   defaultValue={params.search}
                 />
               </Field>
-              <div className="flex items-center gap-2">
+              <div className="md:col-span-5 flex flex-wrap items-center gap-2">
                 <Popover>
                   <PopoverTrigger asChild>
                     <Button variant="outline" type="button">
@@ -174,9 +248,7 @@ export default async function MessagesPage({
                         />
                       </Field>
                       <Field>
-                        <FieldLabel htmlFor="pageSize">
-                          Rows per page
-                        </FieldLabel>
+                        <FieldLabel htmlFor="pageSize">Rows per page</FieldLabel>
                         <select
                           id="pageSize"
                           name="pageSize"
@@ -186,35 +258,6 @@ export default async function MessagesPage({
                           <option value="25">25</option>
                           <option value="50">50</option>
                           <option value="100">100</option>
-                        </select>
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="sortBy">Sort by</FieldLabel>
-                        <select
-                          id="sortBy"
-                          name="sortBy"
-                          defaultValue={data.sort.by}
-                          className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
-                        >
-                          {SORT_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-                      <Field>
-                        <FieldLabel htmlFor="sortDir">
-                          Sort direction
-                        </FieldLabel>
-                        <select
-                          id="sortDir"
-                          name="sortDir"
-                          defaultValue={data.sort.direction}
-                          className="h-9 rounded-lg border border-input bg-background px-3 text-sm"
-                        >
-                          <option value="desc">Descending</option>
-                          <option value="asc">Ascending</option>
                         </select>
                       </Field>
                     </div>
@@ -238,19 +281,39 @@ export default async function MessagesPage({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <MessagesTable
-            rows={data.items.map((message) => ({
-              id: message.id,
-              mailboxEmail: message.mailbox.email,
-              direction: message.direction,
-              fromText: message.fromText,
-              toText: message.toText,
-              subject: message.subject,
-              snippet: message.snippet,
-              receivedAt: message.receivedAt?.toISOString() ?? null,
-              syncedAt: message.syncedAt.toISOString(),
-            }))}
-          />
+          {view === "table" ? (
+            <MessagesTable
+              rows={data.items.map((message) => ({
+                id: message.id,
+                mailboxEmail: message.mailbox.email,
+                direction: message.direction,
+                folderName: message.folderName,
+                fromText: message.fromText,
+                toText: message.toText,
+                subject: message.subject,
+                snippet: message.snippet,
+                receivedAt: message.receivedAt?.toISOString() ?? null,
+                syncedAt: message.syncedAt.toISOString(),
+              }))}
+              sortBy={data.sort.by}
+              sortDir={data.sort.direction}
+              sortHrefs={sortHrefs}
+            />
+          ) : (
+            <MessagesInbox
+              rows={data.items.map((message) => ({
+                id: message.id,
+                mailboxEmail: message.mailbox.email,
+                direction: message.direction,
+                fromText: message.fromText,
+                toText: message.toText,
+                subject: message.subject,
+                snippet: message.snippet,
+                receivedAt: message.receivedAt?.toISOString() ?? null,
+              }))}
+            />
+          )}
+
           <Pagination>
             <PaginationContent>
               <PaginationItem>

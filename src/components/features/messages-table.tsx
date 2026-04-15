@@ -3,21 +3,24 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { useRouter } from "next/navigation";
+import { CaretDownIcon, CaretUpIcon, ArrowsDownUpIcon } from "@phosphor-icons/react";
 
 import { DirectionBadge } from "@/components/features/status-badge";
+import type { MessageSortBy, MessageSortDir } from "@/lib/server/data";
 import {
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
-  TableRow
+  TableRow,
 } from "@/components/ui/table";
 
 export type MessageRow = {
   id: string;
   mailboxEmail: string;
   direction: "incoming" | "outgoing";
+  folderName: string;
   fromText: string;
   toText: string;
   subject: string | null;
@@ -34,21 +37,102 @@ function formatDateTime(value: string | null) {
   return format(new Date(value), "yyyy-MM-dd HH:mm");
 }
 
-export function MessagesTable({ rows }: { rows: MessageRow[] }) {
+function SortHeader({
+  label,
+  column,
+  activeSortBy,
+  activeSortDir,
+  href,
+}: {
+  label: string;
+  column: MessageSortBy;
+  activeSortBy: MessageSortBy;
+  activeSortDir: MessageSortDir;
+  href: string;
+}) {
+  const isActive = activeSortBy === column;
+
+  return (
+    <Link className="inline-flex items-center gap-1 hover:text-foreground" href={href}>
+      <span>{label}</span>
+      {isActive ? (
+        activeSortDir === "asc" ? (
+          <CaretUpIcon data-icon="inline-end" />
+        ) : (
+          <CaretDownIcon data-icon="inline-end" />
+        )
+      ) : (
+        <ArrowsDownUpIcon data-icon="inline-end" />
+      )}
+    </Link>
+  );
+}
+
+export function MessagesTable({
+  rows,
+  sortBy,
+  sortDir,
+  sortHrefs,
+}: {
+  rows: MessageRow[];
+  sortBy: MessageSortBy;
+  sortDir: MessageSortDir;
+  sortHrefs: Record<MessageSortBy, string>;
+}) {
   const router = useRouter();
 
   return (
-    <Table className="table-fixed">
+    <Table className="min-w-[1320px] table-fixed">
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[12ch]">Received</TableHead>
-          <TableHead className="w-[16ch]">Mailbox</TableHead>
-          <TableHead className="w-[12ch]">Direction</TableHead>
-          <TableHead className="w-[20ch]">From</TableHead>
-          <TableHead className="w-[20ch]">To</TableHead>
-          <TableHead className="w-[26ch]">Subject</TableHead>
-          <TableHead>Snippet</TableHead>
-          <TableHead className="w-[12ch]">Synced</TableHead>
+          <TableHead className="w-[13ch]">
+            <SortHeader
+              label="Received"
+              column="receivedAt"
+              activeSortBy={sortBy}
+              activeSortDir={sortDir}
+              href={sortHrefs.receivedAt}
+            />
+          </TableHead>
+          <TableHead className="w-[16ch]">
+            <SortHeader
+              label="Mailbox"
+              column="mailbox"
+              activeSortBy={sortBy}
+              activeSortDir={sortDir}
+              href={sortHrefs.mailbox}
+            />
+          </TableHead>
+          <TableHead className="w-[12ch]">
+            <SortHeader
+              label="Direction"
+              column="direction"
+              activeSortBy={sortBy}
+              activeSortDir={sortDir}
+              href={sortHrefs.direction}
+            />
+          </TableHead>
+          <TableHead className="w-[18ch]">From</TableHead>
+          <TableHead className="w-[18ch]">To</TableHead>
+          <TableHead className="w-[26ch]">
+            <SortHeader
+              label="Subject"
+              column="subject"
+              activeSortBy={sortBy}
+              activeSortDir={sortDir}
+              href={sortHrefs.subject}
+            />
+          </TableHead>
+          <TableHead className="w-[28ch]">Snippet</TableHead>
+          <TableHead className="w-[13ch]">
+            <SortHeader
+              label="Synced"
+              column="syncedAt"
+              activeSortBy={sortBy}
+              activeSortDir={sortDir}
+              href={sortHrefs.syncedAt}
+            />
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -66,20 +150,30 @@ export function MessagesTable({ rows }: { rows: MessageRow[] }) {
               }
             }}
           >
-            <TableCell>{formatDateTime(row.receivedAt)}</TableCell>
-            <TableCell className="max-w-[18ch] truncate">{row.mailboxEmail}</TableCell>
+            <TableCell>
+              <span className="block truncate">{formatDateTime(row.receivedAt)}</span>
+            </TableCell>
+            <TableCell>
+              <span className="block truncate">{row.mailboxEmail}</span>
+            </TableCell>
             <TableCell>
               <DirectionBadge direction={row.direction} />
             </TableCell>
-            <TableCell className="max-w-[20ch] truncate">{row.fromText || "-"}</TableCell>
-            <TableCell className="max-w-[20ch] truncate">{row.toText || "-"}</TableCell>
-            <TableCell className="max-w-[26ch] truncate">
-              <Link className="font-medium text-primary hover:underline" href={`/messages/${row.id}`}>
-                {row.subject ?? "(no subject)"}
-              </Link>
+            <TableCell>
+              <span className="block truncate">{row.fromText || "-"}</span>
             </TableCell>
-            <TableCell className="max-w-[40ch] truncate text-muted-foreground">{row.snippet ?? "-"}</TableCell>
-            <TableCell>{formatDateTime(row.syncedAt)}</TableCell>
+            <TableCell>
+              <span className="block truncate">{row.toText || "-"}</span>
+            </TableCell>
+            <TableCell>
+              <span className="block truncate font-medium">{row.subject ?? "(no subject)"}</span>
+            </TableCell>
+            <TableCell>
+              <span className="block truncate text-muted-foreground">{row.snippet ?? "-"}</span>
+            </TableCell>
+            <TableCell>
+              <span className="block truncate">{formatDateTime(row.syncedAt)}</span>
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
