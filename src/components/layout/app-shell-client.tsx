@@ -3,16 +3,6 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  ArrowsClockwiseIcon,
-  ChartBarIcon,
-  CommandIcon,
-  EnvelopeSimpleIcon,
-  GearSixIcon,
-  HouseIcon,
-  SignOutIcon,
-  StackIcon,
-} from "@phosphor-icons/react";
 
 import { AppLiveRefresh } from "@/components/layout/app-live-refresh";
 import {
@@ -43,12 +33,22 @@ import {
   SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import {
+  ChartBar,
+  CommandIcon,
+  House,
+  LogOut,
+  Mailbox,
+  Mails,
+  RefreshCw,
+  Settings,
+} from "lucide-react";
 
 const navigation = [
-  { href: "/dashboard", label: "Dashboard", icon: HouseIcon },
-  { href: "/messages", label: "Messages", icon: EnvelopeSimpleIcon },
-  { href: "/mailboxes", label: "Mailboxes", icon: StackIcon },
-  { href: "/system", label: "System", icon: GearSixIcon },
+  { href: "/dashboard", label: "Dashboard", icon: House },
+  { href: "/messages", label: "Messages", icon: Mails },
+  { href: "/mailboxes", label: "Mailboxes", icon: Mailbox },
+  { href: "/system", label: "System", icon: Settings },
 ] as const;
 
 const titleByPath: Record<string, string> = {
@@ -92,7 +92,7 @@ export function AppShellClient({
                 isActive={pathname === "/dashboard"}
               >
                 <Link href="/dashboard">
-                  <ChartBarIcon />
+                  <ChartBar />
                   <span>Mail Monitor</span>
                 </Link>
               </SidebarMenuButton>
@@ -141,7 +141,7 @@ export function AppShellClient({
           </div>
           <form action={logoutAction}>
             <Button type="submit" variant="outline" className="w-full">
-              <SignOutIcon data-icon="inline-start" />
+              <LogOut data-icon="inline-start" />
               Logout
             </Button>
           </form>
@@ -176,7 +176,7 @@ export function AppShellClient({
                 size="icon-sm"
                 onClick={() => router.refresh()}
               >
-                <ArrowsClockwiseIcon />
+                <RefreshCw />
                 <span className="sr-only">Refresh</span>
               </Button>
             </div>

@@ -3,14 +3,12 @@
 import Link from "next/link";
 import { format } from "date-fns";
 import { useRouter } from "next/navigation";
-import {
-  CaretDownIcon,
-  CaretUpIcon,
-  ArrowsDownUpIcon,
-} from "@phosphor-icons/react";
 
 import { DirectionBadge } from "@/components/shared/status-badge";
-import type { MessageSortBy, MessageSortDir } from "@/app/(app)/messages/queries";
+import type {
+  MessageSortBy,
+  MessageSortDir,
+} from "@/app/(app)/messages/queries";
 import {
   Table,
   TableBody,
@@ -25,6 +23,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ChevronDown, ChevronsUpDown, ChevronUp } from "lucide-react";
 
 export type MessageRow = {
   id: string;
@@ -70,12 +69,12 @@ function SortHeader({
       <span>{label}</span>
       {isActive ? (
         activeSortDir === "asc" ? (
-          <CaretUpIcon data-icon="inline-end" />
+          <ChevronUp className="size-4" />
         ) : (
-          <CaretDownIcon data-icon="inline-end" />
+          <ChevronDown className="size-4" />
         )
       ) : (
-        <ArrowsDownUpIcon data-icon="inline-end" />
+        <ChevronsUpDown className="size-4" />
       )}
     </Link>
   );

@@ -1,20 +1,17 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
+import * as React from "react";
 
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupButton,
   InputGroupInput,
-} from "@/components/ui/input-group"
+} from "@/components/ui/input-group";
+import { Eye, EyeOff } from "lucide-react";
 
-function PasswordInput({
-  className,
-  ...props
-}: React.ComponentProps<"input">) {
-  const [isVisible, setIsVisible] = React.useState(false)
+function PasswordInput({ className, ...props }: React.ComponentProps<"input">) {
+  const [isVisible, setIsVisible] = React.useState(false);
 
   return (
     <InputGroup>
@@ -32,9 +29,9 @@ function PasswordInput({
           aria-label={isVisible ? "Hide password" : "Show password"}
         >
           {isVisible ? (
-            <EyeSlashIcon data-icon="inline-start" />
+            <EyeOff data-icon="inline-start" />
           ) : (
-            <EyeIcon data-icon="inline-start" />
+            <Eye data-icon="inline-start" />
           )}
           <span className="sr-only">
             {isVisible ? "Hide password" : "Show password"}
@@ -42,7 +39,7 @@ function PasswordInput({
         </InputGroupButton>
       </InputGroupAddon>
     </InputGroup>
-  )
+  );
 }
 
-export { PasswordInput }
+export { PasswordInput };
