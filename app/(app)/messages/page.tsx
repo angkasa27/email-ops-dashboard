@@ -1,4 +1,5 @@
 import { MailDirection } from "@prisma/client";
+import Link from "next/link";
 
 import { MessagesTable } from "@/components/features/messages-table";
 import { Button } from "@/components/ui/button";
@@ -221,7 +222,7 @@ export default async function MessagesPage({
                 </Popover>
                 <Button type="submit">Apply</Button>
                 <Button asChild variant="ghost">
-                  <a href="/messages">Reset</a>
+                  <Link href="/messages">Reset</Link>
                 </Button>
               </div>
             </FieldGroup>

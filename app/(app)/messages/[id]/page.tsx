@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { DirectionBadge } from "@/components/features/status-badge";
 import { prisma } from "@/lib/server/prisma";
+import { sanitizeEmailHtml } from "@/lib/server/sanitize";
 import { requireSession } from "@/lib/server/session";
 
 export const dynamic = "force-dynamic";
@@ -19,14 +20,13 @@ function formatContacts(payload: unknown): string {
   }
 
   return payload
-    .map((entry) => {
+    .flatMap((entry) => {
       if (!entry || typeof entry !== "object") {
-        return "";
+        return [];
       }
       const address = (entry as { address?: unknown }).address;
-      return typeof address === "string" ? address : "";
+      return typeof address === "string" ? [address] : [];
     })
-    .filter(Boolean)
     .join(", ");
 }
 
@@ -52,6 +52,8 @@ export default async function MessageDetailPage({ params }: { params: Promise<{ 
       messageId: message.id
     }
   });
+
+  const sanitizedHtmlBody = message.bodyHtml ? sanitizeEmailHtml(message.bodyHtml) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -79,7 +81,7 @@ export default async function MessageDetailPage({ params }: { params: Promise<{ 
         </CardContent>
       </Card>
 
-      {message.bodyHtml ? (
+      {sanitizedHtmlBody ? (
         <Card>
           <CardHeader>
             <CardTitle>HTML Body</CardTitle>
@@ -87,7 +89,7 @@ export default async function MessageDetailPage({ params }: { params: Promise<{ 
           <CardContent>
             <article
               className="prose max-w-none rounded-2xl border bg-background p-4"
-              dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
+              dangerouslySetInnerHTML={{ __html: sanitizedHtmlBody }}
             />
           </CardContent>
         </Card>

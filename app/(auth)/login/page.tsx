@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { getSession } from "@/lib/server/session";
 
 import { loginAction } from "./actions";
@@ -51,7 +52,7 @@ export default async function LoginPage({
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="password">Password</FieldLabel>
-                    <Input id="password" name="password" type="password" required autoComplete="current-password" />
+                    <PasswordInput id="password" name="password" required autoComplete="current-password" />
                   </Field>
                 </FieldGroup>
                 <Button className="w-full" type="submit">

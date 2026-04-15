@@ -18,6 +18,7 @@ import {
   FieldSet
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { getMailboxes } from "@/lib/server/data";
 
 import {
@@ -60,7 +61,7 @@ export default async function MailboxesPage() {
               </Field>
               <Field>
                 <FieldLabel htmlFor="create-password">Password</FieldLabel>
-                <Input id="create-password" name="password" type="password" placeholder="app password" required />
+                <PasswordInput id="create-password" name="password" placeholder="app password" required />
               </Field>
               <Field>
                 <FieldSet>
@@ -124,10 +125,9 @@ export default async function MailboxesPage() {
                   </Field>
                   <Field>
                     <FieldLabel htmlFor={`password-${mailbox.id}`}>Password</FieldLabel>
-                    <Input
+                    <PasswordInput
                       id={`password-${mailbox.id}`}
                       name="password"
-                      type="password"
                       placeholder="Leave blank to keep current"
                     />
                   </Field>

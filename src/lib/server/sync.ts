@@ -101,7 +101,15 @@ export async function syncMailbox(
   let client: ImapMailboxClient | null = null;
 
   try {
-    const password = decryptSecret(mailbox.encryptedPassword, env.APP_ENCRYPTION_KEY);
+    let password: string;
+    try {
+      password = decryptSecret(mailbox.encryptedPassword, env.APP_ENCRYPTION_KEY);
+    } catch {
+      throw new Error(
+        "Unable to decrypt mailbox password. Check APP_ENCRYPTION_KEY consistency across web and worker, then re-save mailbox credentials."
+      );
+    }
+
     client = await createClient({
       host: mailbox.host,
       port: mailbox.port,

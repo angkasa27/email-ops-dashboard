@@ -1,11 +1,13 @@
+import "dotenv/config";
+
 import { z } from "zod";
 
 const envSchema = z.object({
-  DATABASE_URL: z.string().min(1).default("postgresql://postgres:postgres@localhost:5432/monitor_email"),
-  APP_ENCRYPTION_KEY: z.string().min(10).default("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="),
-  ADMIN_USERNAME: z.string().min(1).default("admin"),
-  ADMIN_PASSWORD: z.string().min(1).default("password"),
-  SESSION_SECRET: z.string().min(12).default("local-dev-session-secret"),
+  DATABASE_URL: z.string().min(1),
+  APP_ENCRYPTION_KEY: z.string().min(10),
+  ADMIN_USERNAME: z.string().min(1),
+  ADMIN_PASSWORD: z.string().min(1),
+  SESSION_SECRET: z.string().min(12),
   SYNC_POLL_INTERVAL_MS: z.string().default("60000"),
   EVENTS_POLL_INTERVAL_MS: z.string().default("3000")
 });
