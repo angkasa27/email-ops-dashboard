@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { format } from "date-fns";
+import { useRouter } from "next/navigation";
 
 import { DirectionBadge } from "@/components/features/status-badge";
 import {
@@ -32,23 +35,37 @@ function formatDateTime(value: string | null) {
 }
 
 export function MessagesTable({ rows }: { rows: MessageRow[] }) {
+  const router = useRouter();
+
   return (
-    <Table>
+    <Table className="table-fixed">
       <TableHeader>
         <TableRow>
-          <TableHead>Received</TableHead>
-          <TableHead>Mailbox</TableHead>
-          <TableHead>Direction</TableHead>
-          <TableHead>From</TableHead>
-          <TableHead>To</TableHead>
-          <TableHead>Subject</TableHead>
+          <TableHead className="w-[12ch]">Received</TableHead>
+          <TableHead className="w-[16ch]">Mailbox</TableHead>
+          <TableHead className="w-[12ch]">Direction</TableHead>
+          <TableHead className="w-[20ch]">From</TableHead>
+          <TableHead className="w-[20ch]">To</TableHead>
+          <TableHead className="w-[26ch]">Subject</TableHead>
           <TableHead>Snippet</TableHead>
-          <TableHead>Synced</TableHead>
+          <TableHead className="w-[12ch]">Synced</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {rows.map((row) => (
-          <TableRow key={row.id}>
+          <TableRow
+            key={row.id}
+            tabIndex={0}
+            role="link"
+            className="cursor-pointer"
+            onClick={() => router.push(`/messages/${row.id}`)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                router.push(`/messages/${row.id}`);
+              }
+            }}
+          >
             <TableCell>{formatDateTime(row.receivedAt)}</TableCell>
             <TableCell className="max-w-[18ch] truncate">{row.mailboxEmail}</TableCell>
             <TableCell>
@@ -56,7 +73,7 @@ export function MessagesTable({ rows }: { rows: MessageRow[] }) {
             </TableCell>
             <TableCell className="max-w-[20ch] truncate">{row.fromText || "-"}</TableCell>
             <TableCell className="max-w-[20ch] truncate">{row.toText || "-"}</TableCell>
-            <TableCell className="max-w-[30ch]">
+            <TableCell className="max-w-[26ch] truncate">
               <Link className="font-medium text-primary hover:underline" href={`/messages/${row.id}`}>
                 {row.subject ?? "(no subject)"}
               </Link>

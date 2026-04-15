@@ -1,4 +1,4 @@
-import { MailDirection } from "@prisma/client";
+import { MailDirection } from "@/generated/prisma/client";
 import Link from "next/link";
 
 import { MessagesTable } from "@/components/features/messages-table";

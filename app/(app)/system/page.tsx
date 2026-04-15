@@ -50,6 +50,7 @@ export default async function SystemPage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Reason</TableHead>
                 <TableHead>Created</TableHead>
+                <TableHead>Error</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -61,6 +62,9 @@ export default async function SystemPage() {
                   </TableCell>
                   <TableCell>{job.reason}</TableCell>
                   <TableCell>{formatDistanceToNow(job.createdAt, { addSuffix: true })}</TableCell>
+                  <TableCell className="max-w-[48ch] whitespace-normal break-words text-muted-foreground">
+                    {job.error ?? "-"}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -95,7 +99,9 @@ export default async function SystemPage() {
                   <TableCell>{formatDistanceToNow(run.startedAt, { addSuffix: true })}</TableCell>
                   <TableCell>{run.incomingCount}</TableCell>
                   <TableCell>{run.outgoingCount}</TableCell>
-                  <TableCell className="max-w-[30ch] truncate text-muted-foreground">{run.errorMessage ?? "-"}</TableCell>
+                  <TableCell className="max-w-[48ch] whitespace-normal break-words text-muted-foreground">
+                    {run.errorMessage ?? "-"}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

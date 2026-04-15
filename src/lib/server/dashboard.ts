@@ -1,4 +1,4 @@
-import { MailDirection, MailboxStatus, SyncRunStatus } from "@prisma/client";
+import { MailDirection, MailboxStatus, SyncRunStatus } from "../../generated/prisma/client";
 
 type DashboardSummaryInput = {
   mailboxes: Array<{

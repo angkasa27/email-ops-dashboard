@@ -1,4 +1,4 @@
-import { MailDirection, MailboxStatus, Prisma } from "@prisma/client";
+import { MailDirection, MailboxStatus, Prisma } from "../../generated/prisma/client";
 
 import { buildDashboardSummary } from "./dashboard";
 import { prisma } from "./prisma";
@@ -305,6 +305,7 @@ export async function getSystemStatus() {
         id: true,
         status: true,
         reason: true,
+        error: true,
         createdAt: true,
         mailbox: {
           select: {

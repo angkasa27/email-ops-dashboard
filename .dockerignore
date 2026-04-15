@@ -8,4 +8,4 @@ coverage
 .env
 .env.*
 !.env.example
-prisma/migrations
+src/generated/prisma

@@ -1,7 +1,8 @@
-FROM node:20-bookworm-slim AS base
+FROM node:22-bookworm-slim AS base
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN corepack enable
 
 WORKDIR /app
@@ -18,6 +19,7 @@ RUN pnpm build
 FROM base AS runner
 
 ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
 WORKDIR /app
 
 COPY --from=build /app /app

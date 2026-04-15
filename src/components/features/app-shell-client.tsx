@@ -130,7 +130,7 @@ export function AppShellClient({
         </SidebarContent>
         <SidebarSeparator />
         <SidebarFooter>
-          <div className="flex flex-col gap-2 rounded-lg border border-sidebar-border p-3 text-xs text-sidebar-foreground/80">
+          <div className="flex flex-col gap-2 rounded-lg border border-sidebar-border p-3 text-xs text-sidebar-foreground/80 bg-background">
             <div className="flex items-center justify-between gap-2">
               <span>Signed in as</span>
               <Badge variant="secondary">Admin</Badge>

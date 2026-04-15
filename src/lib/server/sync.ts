@@ -1,4 +1,4 @@
-import { MailDirection, Prisma, SyncJobStatus, SyncRunStatus } from "@prisma/client";
+import { MailDirection, Prisma, SyncJobStatus, SyncRunStatus } from "../../generated/prisma/client";
 
 import { decryptSecret } from "./crypto";
 import { env } from "./env";
@@ -17,6 +17,55 @@ const FOLDERS: FolderPlan[] = [
 
 function toJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
+}
+
+function toErrorDetail(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return null;
+}
+
+function formatSyncError(error: unknown, context?: string): string {
+  const message = error instanceof Error ? error.message : "Unknown sync failure";
+  const details: string[] = [];
+
+  if (error && typeof error === "object") {
+    const source = error as Record<string, unknown>;
+    const command = toErrorDetail(source.command);
+    const code = toErrorDetail(source.code);
+    const responseStatus = toErrorDetail(source.responseStatus);
+    const responseCode = toErrorDetail(source.serverResponseCode);
+    const responseText = toErrorDetail(source.responseText);
+
+    if (command) {
+      details.push(`command=${command}`);
+    }
+    if (code) {
+      details.push(`code=${code}`);
+    }
+    if (responseStatus) {
+      details.push(`imapStatus=${responseStatus}`);
+    }
+    if (responseCode) {
+      details.push(`serverCode=${responseCode}`);
+    }
+    if (responseText) {
+      details.push(`response=${responseText}`);
+    }
+  }
+
+  const prefix = context ? `${context}: ` : "";
+  if (details.length === 0) {
+    return `${prefix}${message}`;
+  }
+
+  return `${prefix}${message} (${details.join(", ")})`;
 }
 
 export async function queueMailboxSync(mailboxId: string, reason: string) {
@@ -59,7 +108,7 @@ export async function processSyncQueue(options?: { createClient?: typeof createI
       }
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown sync failure";
+    const message = formatSyncError(error, "Sync queue job failed");
     await prisma.syncJob.update({
       where: { id: job.id },
       data: {
@@ -150,7 +199,7 @@ export async function syncMailbox(
       }
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown sync failure";
+    const message = formatSyncError(error, `Mailbox sync failed for ${mailbox.email}`);
     await prisma.syncRun.update({
       where: { id: run.id },
       data: {
@@ -186,7 +235,12 @@ async function syncFolder(mailboxId: string, folder: FolderPlan, client: ImapMai
   });
 
   const lastUid = cursor?.lastUid ?? 0;
-  const messages = await client.listMessages(folder.folderName, lastUid);
+  let messages;
+  try {
+    messages = await client.listMessages(folder.folderName, lastUid);
+  } catch (error) {
+    throw new Error(formatSyncError(error, `Folder ${folder.folderName}`));
+  }
 
   let maxUid = lastUid;
   for (const message of messages) {
