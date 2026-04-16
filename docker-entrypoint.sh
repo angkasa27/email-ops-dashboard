@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -eu
 
+echo "Running Prisma migrations..."
+pnpm prisma migrate deploy
+echo "Prisma migrations completed."
+
 pnpm run start:worker &
 worker_pid=$!
 
