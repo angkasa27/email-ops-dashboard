@@ -1,18 +1,41 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/server/session";
+import { SyncJobStatus, SyncRunStatus } from "@/generated/prisma/client";
+import { getSession } from "@/lib/server/session";
 import { prisma } from "@/lib/db/prisma";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
-  try {
-    // Basic auth check
-    await requireSession();
+function parseJobStatus(value: string | null): SyncJobStatus | undefined {
+  if (!value || value === "all") {
+    return undefined;
+  }
+  if (value === "queued" || value === "running" || value === "completed" || value === "failed") {
+    return value;
+  }
+  return undefined;
+}
 
+function parseRunStatus(value: string | null): SyncRunStatus | undefined {
+  if (!value || value === "all") {
+    return undefined;
+  }
+  if (value === "running" || value === "ok" || value === "error") {
+    return value;
+  }
+  return undefined;
+}
+
+export async function GET(request: Request) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
     const { searchParams } = new URL(request.url);
     const mailboxId = searchParams.get("mailboxId") || undefined;
-    const jobStatus = searchParams.get("jobStatus") || undefined;
-    const runStatus = searchParams.get("runStatus") || undefined;
+    const jobStatus = parseJobStatus(searchParams.get("jobStatus"));
+    const runStatus = parseRunStatus(searchParams.get("runStatus"));
 
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
@@ -39,7 +62,7 @@ export async function GET(request: Request) {
         take: 50,
         where: {
           mailboxId: mailboxId === "all" ? undefined : mailboxId,
-          status: jobStatus && jobStatus !== "all" ? (jobStatus as any) : undefined,
+          status: jobStatus,
         },
         orderBy: { createdAt: "desc" },
         select: {
@@ -55,7 +78,7 @@ export async function GET(request: Request) {
         take: 50,
         where: {
           mailboxId: mailboxId === "all" ? undefined : mailboxId,
-          status: runStatus && runStatus !== "all" ? (runStatus as any) : undefined,
+          status: runStatus,
         },
         orderBy: { startedAt: "desc" },
         select: {

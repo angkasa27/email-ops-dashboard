@@ -1,3 +1,29 @@
+import { SyncJobStatus, SyncRunStatus } from "@/generated/prisma/client";
+
+export type SystemJobRow = {
+  id: string;
+  status: SyncJobStatus;
+  reason: string;
+  error: string | null;
+  createdAt: string;
+  mailbox: {
+    email: string;
+  };
+};
+
+export type SystemRunRow = {
+  id: string;
+  status: SyncRunStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  incomingCount: number;
+  outgoingCount: number;
+  errorMessage: string | null;
+  mailbox: {
+    email: string;
+  };
+};
+
 export type SystemData = {
   heartbeat: { lastSeenAt: string; currentState: string } | null;
   metrics: {
@@ -6,7 +32,7 @@ export type SystemData = {
     failedJobs24h: number;
     failedRuns24h: number;
   };
-  jobs: any[];
-  runs: any[];
+  jobs: SystemJobRow[];
+  runs: SystemRunRow[];
   mailboxes: { id: string; email: string }[];
 };

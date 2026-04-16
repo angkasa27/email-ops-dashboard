@@ -1,14 +1,10 @@
 import { env } from "../src/lib/server/env";
-import { prisma } from "../src/lib/db/prisma";
-import { processSyncQueue, queueMailboxSync, recordWorkerHeartbeat } from "../src/lib/server/sync";
+import { processSyncQueue, recordWorkerHeartbeat, scheduleQueuedSyncJobsForAllMailboxes } from "../src/lib/server/sync";
 
 let isTicking = false;
 
 async function ensureScheduledJobs() {
-  const mailboxes = await prisma.mailbox.findMany({ select: { id: true } });
-  for (const mailbox of mailboxes) {
-    await queueMailboxSync(mailbox.id, "scheduled");
-  }
+  await scheduleQueuedSyncJobsForAllMailboxes();
 }
 
 async function tick() {

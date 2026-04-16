@@ -81,7 +81,7 @@ export function AppShellClient({
 
   return (
     <SidebarProvider>
-      <AppLiveRefresh />
+      {pathname !== "/system" ? <AppLiveRefresh /> : null}
       <Sidebar variant="inset" collapsible="icon">
         <SidebarHeader>
           <SidebarMenu>

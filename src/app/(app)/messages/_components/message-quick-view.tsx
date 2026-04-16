@@ -26,7 +26,7 @@ function formatContacts(payload: unknown): string {
     .join(", ");
 }
 
-type MessageDetail = {
+export type MessageQuickViewDetail = {
   id: string;
   subject: string | null;
   direction: "incoming" | "outgoing";
@@ -43,7 +43,7 @@ export function MessageQuickView({
   message,
   sanitizedHtmlBody,
 }: {
-  message: MessageDetail | null;
+  message: MessageQuickViewDetail | null;
   sanitizedHtmlBody: string | null;
 }) {
   const router = useRouter();

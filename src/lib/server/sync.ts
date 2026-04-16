@@ -1,4 +1,5 @@
 import { MailDirection, Prisma, SyncJobStatus, SyncRunStatus } from "../../generated/prisma/client";
+import { randomUUID } from "node:crypto";
 
 import { decryptSecret } from "./crypto";
 import { env } from "./env";
@@ -98,6 +99,32 @@ export async function queueMailboxSync(mailboxId: string, reason: string) {
 
     throw error;
   }
+}
+
+export async function scheduleQueuedSyncJobsForAllMailboxes() {
+  const eligibleMailboxes = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT m.id
+    FROM "Mailbox" m
+    LEFT JOIN "SyncJob" j
+      ON j."mailboxId" = m.id
+      AND j.status IN ('queued'::"SyncJobStatus", 'running'::"SyncJobStatus")
+    WHERE j.id IS NULL
+  `;
+
+  if (eligibleMailboxes.length === 0) {
+    return 0;
+  }
+
+  const inserted = await prisma.syncJob.createMany({
+    data: eligibleMailboxes.map((mailbox) => ({
+      id: randomUUID(),
+      mailboxId: mailbox.id,
+      reason: "scheduled",
+      status: "queued",
+    })),
+  });
+
+  return inserted.count;
 }
 
 export async function claimNextQueuedSyncJob(): Promise<ClaimedSyncJob | null> {

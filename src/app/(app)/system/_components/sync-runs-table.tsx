@@ -17,9 +17,10 @@ import {
   EmptyDescription,
   EmptyMedia,
 } from "@/components/ui/empty";
+import { SystemRunRow } from "./types";
 
 interface SyncRunsTableProps {
-  runs: any[];
+  runs: SystemRunRow[];
 }
 
 export function SyncRunsTable({ runs }: SyncRunsTableProps) {

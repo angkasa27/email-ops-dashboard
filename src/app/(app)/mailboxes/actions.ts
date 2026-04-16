@@ -1,25 +1,34 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { encryptSecret } from "@/lib/server/crypto";
 import { env } from "@/lib/server/env";
 import { prisma } from "@/lib/db/prisma";
+import { parseCreateMailboxFormData, parseMailboxIdFormData, parseUpdateMailboxFormData } from "@/lib/server/mailbox-validation";
 import { queueMailboxSync } from "@/lib/server/sync";
 import { requireSession } from "@/lib/server/session";
 
+function redirectWithError(error: string): never {
+  redirect(`/mailboxes?error=${encodeURIComponent(error)}`);
+}
+
 export async function createMailboxAction(formData: FormData) {
   await requireSession();
-  const secure = String(formData.get("secure") ?? "on") === "on";
+  const parsed = parseCreateMailboxFormData(formData);
+  if (!parsed.success) {
+    redirectWithError(parsed.error);
+  }
 
   await prisma.mailbox.create({
     data: {
-      email: String(formData.get("email") ?? ""),
-      host: String(formData.get("host") ?? ""),
-      port: Number(formData.get("port") ?? 993),
-      secure,
-      username: String(formData.get("username") ?? ""),
-      encryptedPassword: encryptSecret(String(formData.get("password") ?? ""), env.APP_ENCRYPTION_KEY)
+      email: parsed.data.email,
+      host: parsed.data.host,
+      port: parsed.data.port,
+      secure: parsed.data.secure,
+      username: parsed.data.username,
+      encryptedPassword: encryptSecret(parsed.data.password, env.APP_ENCRYPTION_KEY)
     }
   });
 
@@ -29,25 +38,22 @@ export async function createMailboxAction(formData: FormData) {
 
 export async function updateMailboxAction(formData: FormData) {
   await requireSession();
-  const mailboxId = String(formData.get("id") ?? "");
-  if (!mailboxId) {
-    return;
+  const parsed = parseUpdateMailboxFormData(formData);
+  if (!parsed.success) {
+    redirectWithError(parsed.error);
   }
 
-  const secure = String(formData.get("secure") ?? "off") === "on";
-  const passwordInput = String(formData.get("password") ?? "");
-
   await prisma.mailbox.update({
-    where: { id: mailboxId },
+    where: { id: parsed.data.id },
     data: {
-      email: String(formData.get("email") ?? ""),
-      host: String(formData.get("host") ?? ""),
-      port: Number(formData.get("port") ?? 993),
-      secure,
-      username: String(formData.get("username") ?? ""),
-      ...(passwordInput
+      email: parsed.data.email,
+      host: parsed.data.host,
+      port: parsed.data.port,
+      secure: parsed.data.secure,
+      username: parsed.data.username,
+      ...(parsed.data.password
         ? {
-            encryptedPassword: encryptSecret(passwordInput, env.APP_ENCRYPTION_KEY)
+            encryptedPassword: encryptSecret(parsed.data.password, env.APP_ENCRYPTION_KEY)
           }
         : {})
     }
@@ -58,12 +64,12 @@ export async function updateMailboxAction(formData: FormData) {
 
 export async function deleteMailboxAction(formData: FormData) {
   await requireSession();
-  const id = String(formData.get("id") ?? "");
-  if (!id) {
-    return;
+  const parsed = parseMailboxIdFormData(formData);
+  if (!parsed.success) {
+    redirectWithError(parsed.error);
   }
 
-  await prisma.mailbox.delete({ where: { id } });
+  await prisma.mailbox.delete({ where: { id: parsed.data.id } });
   revalidatePath("/mailboxes");
   revalidatePath("/messages");
   revalidatePath("/dashboard");
@@ -71,12 +77,12 @@ export async function deleteMailboxAction(formData: FormData) {
 
 export async function queueMailboxSyncAction(formData: FormData) {
   await requireSession();
-  const id = String(formData.get("id") ?? "");
-  if (!id) {
-    return;
+  const parsed = parseMailboxIdFormData(formData);
+  if (!parsed.success) {
+    redirectWithError(parsed.error);
   }
 
-  await queueMailboxSync(id, "manual");
+  await queueMailboxSync(parsed.data.id, "manual");
   revalidatePath("/mailboxes");
   revalidatePath("/system");
 }

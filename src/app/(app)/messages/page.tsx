@@ -5,6 +5,7 @@ import { MessagesInbox } from "./_components/messages-inbox";
 import { MessagesTable } from "./_components/messages-table";
 import { MessagesToolbar } from "./_components/messages-toolbar";
 import { MessageQuickView } from "./_components/message-quick-view";
+import type { MessageQuickViewDetail } from "./_components/message-quick-view";
 import {
   Card,
   CardContent,
@@ -86,7 +87,7 @@ export default async function MessagesPage({
 
   // Quick view sheet fetching
   const quickViewMessageId = params.messageId;
-  let quickViewMessage = null;
+  let quickViewMessage: MessageQuickViewDetail | null = null;
   let sanitizedHtmlBody = null;
 
   if (quickViewMessageId) {
@@ -246,7 +247,7 @@ export default async function MessagesPage({
       </Card>
 
       <MessageQuickView
-        message={quickViewMessage as any}
+        message={quickViewMessage}
         sanitizedHtmlBody={sanitizedHtmlBody}
       />
     </div>

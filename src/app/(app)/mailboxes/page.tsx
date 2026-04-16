@@ -30,11 +30,21 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function MailboxesPage() {
+export default async function MailboxesPage({
+  searchParams
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const params = await searchParams;
   const mailboxes = await getMailboxes();
 
   return (
     <div className="flex flex-col gap-4">
+      {params.error ? (
+        <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {params.error}
+        </div>
+      ) : null}
       <Card>
         <CardHeader>
           <CardTitle>Add Mailbox</CardTitle>

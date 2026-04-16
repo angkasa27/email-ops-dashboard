@@ -1,6 +1,38 @@
 import { prisma } from "@/lib/db/prisma";
+import { SystemData, SystemJobRow, SystemRunRow } from "./_components/types";
 
-export async function getSystemStatus() {
+function serializeJobRows(rows: Array<{
+  id: string;
+  status: SystemJobRow["status"];
+  reason: string;
+  error: string | null;
+  createdAt: Date;
+  mailbox: { email: string };
+}>): SystemJobRow[] {
+  return rows.map((row) => ({
+    ...row,
+    createdAt: row.createdAt.toISOString()
+  }));
+}
+
+function serializeRunRows(rows: Array<{
+  id: string;
+  status: SystemRunRow["status"];
+  startedAt: Date;
+  finishedAt: Date | null;
+  incomingCount: number;
+  outgoingCount: number;
+  errorMessage: string | null;
+  mailbox: { email: string };
+}>): SystemRunRow[] {
+  return rows.map((row) => ({
+    ...row,
+    startedAt: row.startedAt.toISOString(),
+    finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null
+  }));
+}
+
+export async function getSystemStatus(): Promise<SystemData> {
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const [
@@ -63,9 +95,14 @@ export async function getSystemStatus() {
   ]);
 
   return {
-    heartbeat,
-    jobs,
-    runs,
+    heartbeat: heartbeat
+      ? {
+          ...heartbeat,
+          lastSeenAt: heartbeat.lastSeenAt.toISOString()
+        }
+      : null,
+    jobs: serializeJobRows(jobs),
+    runs: serializeRunRows(runs),
     metrics: {
       queuedJobs,
       runningJobs,

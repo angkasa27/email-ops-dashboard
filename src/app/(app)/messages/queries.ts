@@ -94,6 +94,67 @@ function toEndOfDay(dateInput: string) {
   return date;
 }
 
+function buildSearchVectorSql(searchScope: MessageFilterInput["searchScope"]) {
+  if (searchScope === "subject") {
+    return Prisma.sql`to_tsvector('simple', coalesce(m.subject, ''))`;
+  }
+
+  if (searchScope === "body") {
+    return Prisma.sql`to_tsvector('simple', coalesce(m."bodyText", ''))`;
+  }
+
+  return Prisma.sql`to_tsvector('simple', coalesce(m.subject, '') || ' ' || coalesce(m."bodyText", ''))`;
+}
+
+function buildOrderBySql(sortBy: MessageSortBy, sortDir: MessageSortDir) {
+  const direction = sortDir === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+  const orderBy: Prisma.Sql[] = [];
+
+  if (sortBy === "mailbox") {
+    orderBy.push(Prisma.sql`mb.email ${direction} NULLS LAST`);
+  } else if (sortBy === "subject") {
+    orderBy.push(Prisma.sql`m.subject ${direction} NULLS LAST`);
+  } else if (sortBy === "direction") {
+    orderBy.push(Prisma.sql`m.direction ${direction} NULLS LAST`);
+  } else if (sortBy === "syncedAt") {
+    orderBy.push(Prisma.sql`m."syncedAt" ${direction} NULLS LAST`);
+  } else {
+    orderBy.push(Prisma.sql`m."receivedAt" ${direction} NULLS LAST`);
+  }
+
+  if (sortBy !== "receivedAt") {
+    orderBy.push(Prisma.sql`m."receivedAt" DESC NULLS LAST`);
+  }
+
+  if (sortBy !== "syncedAt") {
+    orderBy.push(Prisma.sql`m."syncedAt" DESC NULLS LAST`);
+  }
+
+  return Prisma.join(orderBy, ", ");
+}
+
+function buildRawWhereClauses(filters: MessageFilterInput): Prisma.Sql[] {
+  const clauses: Prisma.Sql[] = [];
+
+  if (filters.mailboxId) {
+    clauses.push(Prisma.sql`m."mailboxId" = ${filters.mailboxId}`);
+  }
+  if (filters.direction) {
+    clauses.push(Prisma.sql`m.direction = ${filters.direction}::"MailDirection"`);
+  }
+  if (filters.folderName) {
+    clauses.push(Prisma.sql`m."folderName" = ${filters.folderName}`);
+  }
+  if (filters.fromDate) {
+    clauses.push(Prisma.sql`m."receivedAt" >= ${new Date(filters.fromDate)}`);
+  }
+  if (filters.toDate) {
+    clauses.push(Prisma.sql`m."receivedAt" <= ${toEndOfDay(filters.toDate)}`);
+  }
+
+  return clauses;
+}
+
 function buildMessageOrderBy(sortBy: MessageSortBy, sortDir: MessageSortDir): Prisma.MessageOrderByWithRelationInput[] {
   const orderBy: Prisma.MessageOrderByWithRelationInput[] = [];
 
@@ -121,6 +182,99 @@ function buildMessageOrderBy(sortBy: MessageSortBy, sortDir: MessageSortDir): Pr
 }
 
 export async function getMessages(filters: MessageFilterInput) {
+  const { page, pageSize, sortBy, sortDir } = resolveMessageQuery({
+    page: filters.page,
+    pageSize: filters.pageSize,
+    sortBy: filters.sortBy,
+    sortDir: filters.sortDir
+  });
+
+  if (filters.search?.trim()) {
+    const clauses = buildRawWhereClauses(filters);
+    clauses.push(
+      Prisma.sql`${buildSearchVectorSql(filters.searchScope)} @@ websearch_to_tsquery('simple', ${filters.search.trim()})`
+    );
+    const whereSql = Prisma.sql`WHERE ${Prisma.join(clauses, " AND ")}`;
+
+    const totalRows = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*)::bigint AS count
+      FROM "Message" m
+      INNER JOIN "Mailbox" mb ON mb.id = m."mailboxId"
+      ${whereSql}
+    `;
+    const total = Number(totalRows[0]?.count ?? 0);
+    const lastPage = Math.max(1, Math.ceil(total / pageSize));
+    const effectivePage = Math.min(page, lastPage);
+    const effectiveSkip = (effectivePage - 1) * pageSize;
+
+    const idRows = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT m.id
+      FROM "Message" m
+      INNER JOIN "Mailbox" mb ON mb.id = m."mailboxId"
+      ${whereSql}
+      ORDER BY ${buildOrderBySql(sortBy, sortDir)}
+      LIMIT ${pageSize}
+      OFFSET ${effectiveSkip}
+    `;
+    const ids = idRows.map((row) => row.id);
+
+    const [messages, mailboxes] = await Promise.all([
+      prisma.message.findMany({
+        where: {
+          id: {
+            in: ids
+          }
+        },
+        select: {
+          id: true,
+          direction: true,
+          subject: true,
+          snippet: true,
+          folderName: true,
+          receivedAt: true,
+          syncedAt: true,
+          fromJson: true,
+          toJson: true,
+          mailbox: {
+            select: {
+              id: true,
+              email: true
+            }
+          }
+        }
+      }),
+      prisma.mailbox.findMany({
+        orderBy: { email: "asc" },
+        select: {
+          id: true,
+          email: true
+        }
+      })
+    ]);
+
+    const byId = new Map(messages.map((message) => [message.id, message]));
+    const orderedMessages = ids.map((id) => byId.get(id)).filter((value): value is NonNullable<typeof value> => Boolean(value));
+
+    const items = orderedMessages.map((message) => ({
+      ...message,
+      fromText: toContactString(message.fromJson),
+      toText: toContactString(message.toJson)
+    }));
+
+    return {
+      mailboxes,
+      items,
+      messages: items,
+      total,
+      page: effectivePage,
+      pageSize,
+      sort: {
+        by: sortBy,
+        direction: sortDir
+      }
+    };
+  }
+
   const where: Prisma.MessageWhereInput = {};
 
   if (filters.mailboxId) {
@@ -158,12 +312,6 @@ export async function getMessages(filters: MessageFilterInput) {
     }
   }
 
-  const { page, pageSize, sortBy, sortDir } = resolveMessageQuery({
-    page: filters.page,
-    pageSize: filters.pageSize,
-    sortBy: filters.sortBy,
-    sortDir: filters.sortDir
-  });
   const total = await prisma.message.count({ where });
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
   const effectivePage = Math.min(page, lastPage);

@@ -7,6 +7,6 @@ export default async function SystemPage() {
   const data = await getSystemStatus();
 
   return (
-    <SystemDashboard initialData={data as any} />
+    <SystemDashboard initialData={data} />
   );
 }
