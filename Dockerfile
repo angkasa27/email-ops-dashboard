@@ -9,7 +9,6 @@ WORKDIR /app
 
 FROM base AS build
 
-ENV DATABASE_URL="postgresql://placeholder:placeholder@placeholder:5432/placeholder"
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
@@ -25,6 +24,8 @@ ENV NODE_OPTIONS=--max-old-space-size=1536
 WORKDIR /app
 
 COPY --from=build /app /app
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 3000
-CMD ["pnpm", "start"]
+CMD ["/app/docker-entrypoint.sh"]
