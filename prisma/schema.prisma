@@ -70,13 +70,31 @@ model Message {
   receivedAt  DateTime?
   snippet     String?
   bodyText    String?
+  bodyTextSearch String?
   bodyHtml    String?
   syncedAt    DateTime      @default(now())
 
   auditLogs AuditLog[]
+  attachments Attachment[]
 
   @@unique([mailboxId, folderName, externalUid])
   @@index([mailboxId, direction, receivedAt])
+}
+
+model Attachment {
+  id                 String   @id @default(cuid())
+  messageId          String
+  message            Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  filename           String
+  contentType        String?
+  contentDisposition String?
+  contentId          String?
+  partId             String?
+  size               Int?
+  isInline           Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  @@index([messageId, isInline, createdAt])
 }
 
 model SyncCursor {

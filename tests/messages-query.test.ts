@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  groupMessageAttachments,
   normalizeMailboxIds,
   resolveMessageQuery,
 } from "../src/app/(app)/messages/queries";
@@ -59,5 +60,35 @@ describe("message query resolution", () => {
     expect(normalizeMailboxIds(undefined)).toBeUndefined();
     expect(normalizeMailboxIds("")).toBeUndefined();
     expect(normalizeMailboxIds(["", "   "])).toBeUndefined();
+  });
+
+  test("groups regular attachments ahead of inline assets", () => {
+    const grouped = groupMessageAttachments([
+      {
+        id: "att-2",
+        filename: "logo.png",
+        contentType: "image/png",
+        contentDisposition: "inline",
+        contentId: "logo@example.com",
+        partId: "1.2",
+        size: 4096,
+        isInline: true,
+        createdAt: new Date("2026-04-17T00:00:00.000Z"),
+      },
+      {
+        id: "att-1",
+        filename: "quote.pdf",
+        contentType: "application/pdf",
+        contentDisposition: "attachment",
+        contentId: null,
+        partId: "2",
+        size: 1024,
+        isInline: false,
+        createdAt: new Date("2026-04-17T00:00:00.000Z"),
+      },
+    ]);
+
+    expect(grouped.attachments.map((entry) => entry.id)).toEqual(["att-1"]);
+    expect(grouped.inlineAssets.map((entry) => entry.id)).toEqual(["att-2"]);
   });
 });

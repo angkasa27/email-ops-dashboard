@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { DirectionBadge } from "@/components/shared/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MessageAttachments, type MessageAttachmentItem } from "./message-attachments";
 
 function formatContacts(payload: unknown): string {
   if (!Array.isArray(payload)) return "-";
@@ -36,6 +37,8 @@ export type MessageQuickViewDetail = {
   ccJson: unknown;
   bodyText: string | null;
   bodyHtml: string | null;
+  attachments: MessageAttachmentItem[];
+  inlineAssets: MessageAttachmentItem[];
   mailbox: { email: string };
 };
 
@@ -172,6 +175,11 @@ export function MessageQuickView({
                   </TabsContent>
                 </Tabs>
               </div>
+
+              <MessageAttachments
+                attachments={message.attachments}
+                inlineAssets={message.inlineAssets}
+              />
             </div>
 
             <SheetFooter className="px-6 py-4 border-t flex-row justify-between sm:justify-between items-center bg-background shrink-0">

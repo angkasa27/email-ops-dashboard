@@ -3,6 +3,17 @@ import { prisma } from "@/lib/db/prisma";
 
 export type MessageSortBy = "receivedAt" | "syncedAt" | "subject" | "mailbox" | "direction";
 export type MessageSortDir = "asc" | "desc";
+export type MessageAttachmentSummary = {
+  id: string;
+  filename: string;
+  contentType: string | null;
+  contentDisposition: string | null;
+  contentId: string | null;
+  partId: string | null;
+  size: number | null;
+  isInline: boolean;
+  createdAt: Date;
+};
 export type ResolvedMessageQuery = {
   page: number;
   pageSize: number;
@@ -88,6 +99,24 @@ function normalizeSortDir(value: string | undefined): MessageSortDir {
   return value === "asc" ? "asc" : "desc";
 }
 
+export function groupMessageAttachments(attachments: MessageAttachmentSummary[]) {
+  const regular: MessageAttachmentSummary[] = [];
+  const inlineAssets: MessageAttachmentSummary[] = [];
+
+  for (const attachment of attachments) {
+    if (attachment.isInline) {
+      inlineAssets.push(attachment);
+    } else {
+      regular.push(attachment);
+    }
+  }
+
+  return {
+    attachments: regular,
+    inlineAssets,
+  };
+}
+
 export function resolveMessageQuery(input: {
   page?: number;
   pageSize?: number;
@@ -114,10 +143,10 @@ function buildSearchVectorSql(searchScope: MessageFilterInput["searchScope"]) {
   }
 
   if (searchScope === "body") {
-    return Prisma.sql`to_tsvector('simple', coalesce(m."bodyText", ''))`;
+    return Prisma.sql`to_tsvector('simple', coalesce(m."bodyTextSearch", ''))`;
   }
 
-  return Prisma.sql`to_tsvector('simple', coalesce(m.subject, '') || ' ' || coalesce(m."bodyText", ''))`;
+  return Prisma.sql`to_tsvector('simple', coalesce(m.subject, '') || ' ' || coalesce(m."bodyTextSearch", ''))`;
 }
 
 function buildOrderBySql(sortBy: MessageSortBy, sortDir: MessageSortDir) {
@@ -307,11 +336,11 @@ export async function getMessages(filters: MessageFilterInput) {
     if (filters.searchScope === "subject") {
       where.subject = { contains: filters.search, mode: "insensitive" };
     } else if (filters.searchScope === "body") {
-      where.bodyText = { contains: filters.search, mode: "insensitive" };
+      where.bodyTextSearch = { contains: filters.search, mode: "insensitive" };
     } else {
       where.OR = [
         { subject: { contains: filters.search, mode: "insensitive" } },
-        { bodyText: { contains: filters.search, mode: "insensitive" } }
+        { bodyTextSearch: { contains: filters.search, mode: "insensitive" } }
       ];
     }
   }
@@ -385,8 +414,28 @@ export async function getMessages(filters: MessageFilterInput) {
 }
 
 export async function getMessageDetail(id: string) {
-  return await prisma.message.findUnique({
+  const message = await prisma.message.findUnique({
     where: { id },
-    include: { mailbox: true }
+    include: {
+      mailbox: true,
+      attachments: {
+        orderBy: [
+          { isInline: "asc" },
+          { createdAt: "asc" }
+        ]
+      }
+    }
   });
+
+  if (!message) {
+    return null;
+  }
+
+  const groupedAttachments = groupMessageAttachments(message.attachments);
+
+  return {
+    ...message,
+    attachments: groupedAttachments.attachments,
+    inlineAssets: groupedAttachments.inlineAssets
+  };
 }

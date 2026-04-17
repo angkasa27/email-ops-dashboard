@@ -71,7 +71,7 @@ export async function GET(request: Request) {
           reason: true,
           error: true,
           createdAt: true,
-          mailbox: { select: { email: true } },
+          mailbox: { select: { id: true, email: true } },
         },
       }),
       prisma.syncRun.findMany({
@@ -89,7 +89,7 @@ export async function GET(request: Request) {
           incomingCount: true,
           outgoingCount: true,
           errorMessage: true,
-          mailbox: { select: { email: true } },
+          mailbox: { select: { id: true, email: true } },
         },
       }),
       prisma.mailbox.findMany({

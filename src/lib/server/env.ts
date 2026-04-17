@@ -11,7 +11,8 @@ const DEV_DEFAULTS = {
   SYNC_POLL_INTERVAL_MS: 60000,
   EVENTS_POLL_INTERVAL_MS: 3000,
   SYNC_JOB_STALE_TIMEOUT_MS: 600000,
-  IMAP_COMMAND_TIMEOUT_MS: 120000
+  IMAP_COMMAND_TIMEOUT_MS: 120000,
+  IMAP_SYNC_BATCH_SIZE: 100
 } as const;
 
 const isBuildPhase =
@@ -28,7 +29,8 @@ const envSchema = z.object({
   SYNC_POLL_INTERVAL_MS: z.coerce.number().int().min(5000).default(DEV_DEFAULTS.SYNC_POLL_INTERVAL_MS),
   EVENTS_POLL_INTERVAL_MS: z.coerce.number().int().min(1000).default(DEV_DEFAULTS.EVENTS_POLL_INTERVAL_MS),
   SYNC_JOB_STALE_TIMEOUT_MS: z.coerce.number().int().min(60000).default(DEV_DEFAULTS.SYNC_JOB_STALE_TIMEOUT_MS),
-  IMAP_COMMAND_TIMEOUT_MS: z.coerce.number().int().min(5000).default(DEV_DEFAULTS.IMAP_COMMAND_TIMEOUT_MS)
+  IMAP_COMMAND_TIMEOUT_MS: z.coerce.number().int().min(5000).default(DEV_DEFAULTS.IMAP_COMMAND_TIMEOUT_MS),
+  IMAP_SYNC_BATCH_SIZE: z.coerce.number().int().min(1).default(DEV_DEFAULTS.IMAP_SYNC_BATCH_SIZE)
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -12,9 +12,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DirectionBadge } from "@/components/shared/status-badge";
-import { prisma } from "@/lib/db/prisma";
 import { sanitizeEmailHtml } from "@/lib/server/sanitize";
 import { requireSession } from "@/lib/server/session";
+import { prisma } from "@/lib/db/prisma";
+import { getMessageDetail } from "@/app/(app)/messages/queries";
+import { MessageAttachments } from "../_components/message-attachments";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +41,7 @@ export default async function MessageDetailPage({ params }: { params: Promise<{ 
 
   const [session, message] = await Promise.all([
     requireSession(),
-    prisma.message.findUnique({
-      where: { id },
-      include: { mailbox: true }
-    })
+    getMessageDetail(id)
   ]);
 
   if (!message) {
@@ -136,6 +135,23 @@ export default async function MessageDetailPage({ params }: { params: Promise<{ 
           </Tabs>
         </CardHeader>
       </Card>
+
+      {message.attachments.length > 0 || message.inlineAssets.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Attachments</CardTitle>
+            <CardDescription>
+              Metadata parsed from this message&apos;s MIME parts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MessageAttachments
+              attachments={message.attachments}
+              inlineAssets={message.inlineAssets}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

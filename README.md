@@ -32,12 +32,16 @@ ADMIN_PASSWORD=<strong-password>
 SESSION_SECRET=<strong-session-secret>
 SYNC_POLL_INTERVAL_MS=60000
 EVENTS_POLL_INTERVAL_MS=3000
+IMAP_SYNC_BATCH_SIZE=100
 ```
 
 Production runtime rejects placeholder values for `APP_ENCRYPTION_KEY`, `ADMIN_PASSWORD`, and `SESSION_SECRET`.
 Polling intervals must be positive integers with minimum values:
 - `SYNC_POLL_INTERVAL_MS >= 5000`
 - `EVENTS_POLL_INTERVAL_MS >= 1000`
+- `IMAP_SYNC_BATCH_SIZE >= 1`
+
+`IMAP_SYNC_BATCH_SIZE` controls how many messages per folder are imported in each sync job. Lower values reduce the chance of large-mailbox timeouts at the cost of more continuation jobs.
 
 ## Commands
 

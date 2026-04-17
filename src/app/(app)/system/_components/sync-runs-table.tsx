@@ -58,7 +58,12 @@ export function SyncRunsTable({ runs }: SyncRunsTableProps) {
         <TableBody>
           {runs.map((run) => (
             <TableRow key={run.id}>
-              <TableCell className="font-medium">{run.mailbox.email}</TableCell>
+              <TableCell>
+                <div className="font-medium break-all">{run.mailbox.email}</div>
+                <div className="text-xs text-muted-foreground font-mono break-all">
+                  {run.mailbox.id}
+                </div>
+              </TableCell>
               <TableCell>
                 <SyncRunStatusBadge status={run.status} />
               </TableCell>

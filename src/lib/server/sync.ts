@@ -26,6 +26,20 @@ type StaleReapResult = {
   retriedCount: number;
 };
 
+type SyncFolderResult = {
+  processedCount: number;
+  hasMore: boolean;
+  maxUid: number;
+};
+
+type SyncMailboxResult = {
+  needsContinuation: boolean;
+  incomingCount: number;
+  outgoingCount: number;
+};
+
+const MAX_SEARCHABLE_BODY_TEXT_CHARS = 250_000;
+
 class SyncTimeoutError extends Error {
   code = "SYNC_TIMEOUT";
   command: string;
@@ -134,6 +148,47 @@ function formatDurationMs(ms: number): string {
 
   const seconds = Math.floor(ms / 1000);
   return `${seconds}s`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes}B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)}KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
+function getMemorySnapshot() {
+  const usage = process.memoryUsage();
+  return {
+    rss: formatBytes(usage.rss),
+    heapUsed: formatBytes(usage.heapUsed),
+    heapTotal: formatBytes(usage.heapTotal)
+  };
+}
+
+function logSyncEvent(event: string, details: Record<string, unknown>) {
+  console.info("[sync]", {
+    event,
+    at: new Date().toISOString(),
+    ...details
+  });
+}
+
+function buildSearchableBodyText(bodyText: string | null): string | null {
+  if (!bodyText) {
+    return null;
+  }
+
+  if (bodyText.length <= MAX_SEARCHABLE_BODY_TEXT_CHARS) {
+    return bodyText;
+  }
+
+  return bodyText.slice(0, MAX_SEARCHABLE_BODY_TEXT_CHARS);
 }
 
 export async function queueMailboxSync(mailboxId: string, reason: string) {
@@ -286,13 +341,33 @@ export async function processSyncQueue(options?: { createClient?: typeof createI
   }
 
   try {
-    await syncMailbox(job.mailboxId, createClient, { jobId: job.id });
+    await recordWorkerHeartbeat(`job-start mailbox=${job.mailboxId}`);
+    logSyncEvent("job-start", {
+      mailboxId: job.mailboxId,
+      jobId: job.id,
+      memory: getMemorySnapshot()
+    });
+    const result = await syncMailbox(job.mailboxId, createClient, { jobId: job.id });
     await prisma.syncJob.updateMany({
       where: { id: job.id, status: "running" },
       data: {
         status: "completed",
         finishedAt: new Date()
       }
+    });
+    if (result.needsContinuation) {
+      await queueMailboxSync(job.mailboxId, "continue-batch");
+    }
+    await recordWorkerHeartbeat(
+      `job-complete mailbox=${job.mailboxId} incoming=${result.incomingCount} outgoing=${result.outgoingCount} continuation=${result.needsContinuation}`
+    );
+    logSyncEvent("job-complete", {
+      mailboxId: job.mailboxId,
+      jobId: job.id,
+      incoming: result.incomingCount,
+      outgoing: result.outgoingCount,
+      continuation: result.needsContinuation,
+      memory: getMemorySnapshot()
     });
   } catch (error) {
     const message = formatSyncError(error, "Sync queue job failed");
@@ -304,6 +379,12 @@ export async function processSyncQueue(options?: { createClient?: typeof createI
         error: message
       }
     });
+    logSyncEvent("job-failed", {
+      mailboxId: job.mailboxId,
+      jobId: job.id,
+      error: message,
+      memory: getMemorySnapshot()
+    });
   }
 
   return true;
@@ -313,7 +394,7 @@ export async function syncMailbox(
   mailboxId: string,
   createClient: typeof createImapClient = createImapClient,
   options?: { jobId?: string }
-): Promise<void> {
+): Promise<SyncMailboxResult> {
   const mailbox = await prisma.mailbox.findUnique({ where: { id: mailboxId } });
   if (!mailbox) {
     throw new Error(`Mailbox ${mailboxId} not found`);
@@ -377,19 +458,17 @@ export async function syncMailbox(
 
     let incomingCount = 0;
     let outgoingCount = 0;
+    let needsContinuation = false;
 
     for (const folder of FOLDERS) {
       await ensureNotCancelled();
-      const count = await withTimeout(
-        syncFolder(mailboxId, folder, client),
-        env.IMAP_COMMAND_TIMEOUT_MS,
-        `imap-sync-folder-${folder.folderName}`
-      );
+      const result = await syncFolder(mailboxId, folder, client);
       if (folder.direction === "incoming") {
-        incomingCount += count;
+        incomingCount += result.processedCount;
       } else {
-        outgoingCount += count;
+        outgoingCount += result.processedCount;
       }
+      needsContinuation = needsContinuation || result.hasMore;
     }
 
     await ensureNotCancelled();
@@ -413,6 +492,16 @@ export async function syncMailbox(
         lastSyncError: null
       }
     });
+
+    if (needsContinuation && !options?.jobId) {
+      await queueMailboxSync(mailboxId, "continue-batch");
+    }
+
+    return {
+      needsContinuation,
+      incomingCount,
+      outgoingCount,
+    };
   } catch (error) {
     const message = formatSyncError(error, `Mailbox sync failed for ${mailbox.email}`);
     await prisma.syncRun.update({
@@ -439,7 +528,7 @@ export async function syncMailbox(
   }
 }
 
-async function syncFolder(mailboxId: string, folder: FolderPlan, client: ImapMailboxClient): Promise<number> {
+async function syncFolder(mailboxId: string, folder: FolderPlan, client: ImapMailboxClient): Promise<SyncFolderResult> {
   const cursor = await prisma.syncCursor.findUnique({
     where: {
       mailboxId_folderName: {
@@ -450,18 +539,45 @@ async function syncFolder(mailboxId: string, folder: FolderPlan, client: ImapMai
   });
 
   const lastUid = cursor?.lastUid ?? 0;
-  let messages;
+  let batch;
+  const fetchStartedAt = Date.now();
+  logSyncEvent("folder-fetch-start", {
+    mailboxId,
+    folder: folder.folderName,
+    lastUid,
+    batchSize: env.IMAP_SYNC_BATCH_SIZE,
+    memory: getMemorySnapshot()
+  });
+  await recordWorkerHeartbeat(`fetching mailbox=${mailboxId} folder=${folder.folderName} lastUid=${lastUid}`);
+  const fetchHeartbeatInterval = setInterval(() => {
+    void recordWorkerHeartbeat(`fetch-wait mailbox=${mailboxId} folder=${folder.folderName} lastUid=${lastUid}`);
+  }, 30_000);
   try {
-    messages = await client.listMessages(folder.folderName, lastUid);
+    batch = await client.listMessages(folder.folderName, lastUid, env.IMAP_SYNC_BATCH_SIZE);
   } catch (error) {
     throw new Error(formatSyncError(error, `Folder ${folder.folderName}`));
+  } finally {
+    clearInterval(fetchHeartbeatInterval);
   }
+  logSyncEvent("folder-fetch-complete", {
+    mailboxId,
+    folder: folder.folderName,
+    lastUid,
+    fetched: batch.messages.length,
+    hasMore: batch.hasMore,
+    nextCursorUid: batch.nextCursorUid,
+    durationMs: Date.now() - fetchStartedAt,
+    memory: getMemorySnapshot()
+  });
+  await recordWorkerHeartbeat(
+    `fetched mailbox=${mailboxId} folder=${folder.folderName} count=${batch.messages.length} nextUid=${batch.nextCursorUid}`
+  );
 
-  let maxUid = lastUid;
-  for (const message of messages) {
-    maxUid = Math.max(maxUid, message.uid);
-
-    await prisma.message.upsert({
+  for (let index = 0; index < batch.messages.length; index += 1) {
+    const message = batch.messages[index];
+    const messageStartedAt = Date.now();
+    const bodyTextSearch = buildSearchableBodyText(message.bodyText);
+    const storedMessage = await prisma.message.upsert({
       where: {
         mailboxId_folderName_externalUid: {
           mailboxId,
@@ -481,6 +597,7 @@ async function syncFolder(mailboxId: string, folder: FolderPlan, client: ImapMai
         receivedAt: message.receivedAt ? new Date(message.receivedAt) : null,
         snippet: message.snippet,
         bodyText: message.bodyText,
+        bodyTextSearch,
         bodyHtml: message.bodyHtml,
         syncedAt: new Date()
       },
@@ -499,12 +616,46 @@ async function syncFolder(mailboxId: string, folder: FolderPlan, client: ImapMai
         receivedAt: message.receivedAt ? new Date(message.receivedAt) : null,
         snippet: message.snippet,
         bodyText: message.bodyText,
+        bodyTextSearch,
         bodyHtml: message.bodyHtml
       }
     });
+
+    await recordWorkerHeartbeat(
+      `syncing mailbox=${mailboxId} folder=${folder.folderName} uid=${message.uid}`
+    );
+
+    await prisma.attachment.deleteMany({
+      where: { messageId: storedMessage.id }
+    });
+
+    if (message.attachments.length > 0) {
+      await prisma.attachment.createMany({
+        data: message.attachments.map((attachment) => ({
+          messageId: storedMessage.id,
+          filename: attachment.filename,
+          contentType: attachment.contentType,
+          contentDisposition: attachment.contentDisposition,
+          contentId: attachment.contentId,
+          partId: attachment.partId,
+          size: attachment.size,
+          isInline: attachment.isInline
+        }))
+      });
+    }
+
+    logSyncEvent("message-persist-complete", {
+      mailboxId,
+      folder: folder.folderName,
+      uid: message.uid,
+      position: `${index + 1}/${batch.messages.length}`,
+      attachments: message.attachments.length,
+      durationMs: Date.now() - messageStartedAt,
+      memory: getMemorySnapshot()
+    });
   }
 
-  if (maxUid > lastUid) {
+  if (batch.nextCursorUid > lastUid) {
     await prisma.syncCursor.upsert({
       where: {
         mailboxId_folderName: {
@@ -513,17 +664,21 @@ async function syncFolder(mailboxId: string, folder: FolderPlan, client: ImapMai
         }
       },
       update: {
-        lastUid: maxUid
+        lastUid: batch.nextCursorUid
       },
       create: {
         mailboxId,
         folderName: folder.folderName,
-        lastUid: maxUid
+        lastUid: batch.nextCursorUid
       }
     });
   }
 
-  return messages.length;
+  return {
+    processedCount: batch.messages.length,
+    hasMore: batch.hasMore,
+    maxUid: batch.nextCursorUid,
+  };
 }
 
 export async function recordWorkerHeartbeat(currentState: string) {

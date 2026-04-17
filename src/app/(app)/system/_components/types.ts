@@ -7,6 +7,7 @@ export type SystemJobRow = {
   error: string | null;
   createdAt: string;
   mailbox: {
+    id: string;
     email: string;
   };
 };
@@ -20,6 +21,7 @@ export type SystemRunRow = {
   outgoingCount: number;
   errorMessage: string | null;
   mailbox: {
+    id: string;
     email: string;
   };
 };

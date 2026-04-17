@@ -7,7 +7,7 @@ function serializeJobRows(rows: Array<{
   reason: string;
   error: string | null;
   createdAt: Date;
-  mailbox: { email: string };
+  mailbox: { id: string; email: string };
 }>): SystemJobRow[] {
   return rows.map((row) => ({
     ...row,
@@ -23,7 +23,7 @@ function serializeRunRows(rows: Array<{
   incomingCount: number;
   outgoingCount: number;
   errorMessage: string | null;
-  mailbox: { email: string };
+  mailbox: { id: string; email: string };
 }>): SystemRunRow[] {
   return rows.map((row) => ({
     ...row,
@@ -57,6 +57,7 @@ export async function getSystemStatus(): Promise<SystemData> {
         createdAt: true,
         mailbox: {
           select: {
+            id: true,
             email: true
           }
         }
@@ -75,6 +76,7 @@ export async function getSystemStatus(): Promise<SystemData> {
         errorMessage: true,
         mailbox: {
           select: {
+            id: true,
             email: true
           }
         }

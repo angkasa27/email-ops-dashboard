@@ -61,7 +61,12 @@ export function SyncJobsTable({ jobs, stoppingJobId, onStopJob }: SyncJobsTableP
         <TableBody>
           {jobs.map((job) => (
             <TableRow key={job.id}>
-              <TableCell className="font-medium">{job.mailbox.email}</TableCell>
+              <TableCell>
+                <div className="font-medium break-all">{job.mailbox.email}</div>
+                <div className="text-xs text-muted-foreground font-mono break-all">
+                  {job.mailbox.id}
+                </div>
+              </TableCell>
               <TableCell>
                 <SyncJobStatusBadge status={job.status} />
               </TableCell>
